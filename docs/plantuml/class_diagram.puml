@@ -1,25 +1,90 @@
 @startuml
-interface MediaSource
-class LocalFileSource
-class HlsSource
-class RemoteApiSource
-class LegacyMonolithicSource
-class LegacySourceAdapter
-class RemoteProxySource
+' Title
+title Modular Media Streaming Suite - Class Diagram
 
+' Interfaces and core classes
+interface MediaSource
+interface Renderer
+interface PlaylistItem
+
+' Player / Bridge
+abstract class MediaPlayer {
+  - renderer: Renderer
+  + setRenderer(r: Renderer)
+  + playSource(source: MediaSource)
+}
+class ConcreteMediaPlayer {
+  + playSource(source: MediaSource)
+}
+
+' Renderers (implementor side of Bridge)
+class HardwareRenderer {
+  + render(streamToken: String)
+}
+class SoftwareRenderer {
+  + render(streamToken: String)
+}
+
+' Decorators
+abstract class RendererDecorator {
+  - wrapped: Renderer
+  + render(streamToken: String)
+}
+class WatermarkDecorator {
+  - watermarkText: String
+  + render(streamToken: String)
+}
+class EqualizerDecorator {
+  - preset: String
+  + render(streamToken: String)
+}
+
+' Playlist composite
+class MediaFile {
+  - name: String
+  - source: MediaSource
+  + play(player: MediaPlayer)
+}
+class CompositePlaylist {
+  - name: String
+  - items: List<PlaylistItem>
+  + add(item: PlaylistItem)
+  + play(player: MediaPlayer)
+}
+
+' Sources
+class LocalFileSource {
+  - path: String
+  + openStream(): String
+}
+class HlsSource {
+  - playlistUrl: String
+  + openStream(): String
+}
+class RemoteApiSource {
+  - apiEndpoint: String
+  + openStream(): String
+}
+class RemoteProxySource {
+  - remote: MediaSource
+  - cache: Map
+  + openStream(): String
+}
+class LegacyMonolithicSource {
+  - descriptor: String
+  + fetch(): String
+}
+class LegacySourceAdapter {
+  - legacy: LegacyMonolithicSource
+  + openStream(): String
+}
+
+' Relationships
 MediaSource <|.. LocalFileSource
 MediaSource <|.. HlsSource
 MediaSource <|.. RemoteApiSource
-LegacyMonolithicSource -- LegacySourceAdapter : adapts
-LegacySourceAdapter ..|> MediaSource
 MediaSource <|.. RemoteProxySource
-
-interface Renderer
-class HardwareRenderer
-class SoftwareRenderer
-class RendererDecorator
-class WatermarkDecorator
-class EqualizerDecorator
+LegacySourceAdapter ..|> MediaSource
 
 Renderer <|.. HardwareRenderer
 Renderer <|.. SoftwareRenderer
@@ -27,16 +92,34 @@ Renderer <|.. RendererDecorator
 RendererDecorator <|-- WatermarkDecorator
 RendererDecorator <|-- EqualizerDecorator
 
-interface PlaylistItem
-class MediaFile
-class CompositePlaylist
-
 PlaylistItem <|.. MediaFile
 PlaylistItem <|.. CompositePlaylist
-MediaFile --> MediaSource
-CompositePlaylist --> PlaylistItem : contains 0..*
+MediaFile --> MediaSource : uses
+CompositePlaylist o-- "0..*" PlaylistItem : contains
 
-class MediaPlayer
-MediaPlayer --> Renderer : has
-MediaPlayer --> MediaSource : plays
+MediaPlayer <|-- ConcreteMediaPlayer
+ConcreteMediaPlayer --> Renderer : delegates to
+ConcreteMediaPlayer --> MediaSource : plays
+
+RemoteProxySource --> MediaSource : wraps
+LegacySourceAdapter --> LegacyMonolithicSource : adapts
+
+' Notes to explain patterns
+note left of ConcreteMediaPlayer
+  Bridge: MediaPlayer (abstraction)
+  -> Renderer (implementor)
+end note
+
+note right of RendererDecorator
+  Decorator: add features (watermark, equalizer)
+end note
+
+note bottom of CompositePlaylist
+  Composite: playlists can contain items or other playlists
+end note
+
+note bottom of RemoteProxySource
+  Proxy: caches remote streams transparently
+end note
+
 @enduml
